@@ -46,6 +46,117 @@ class PlotLikertError(ValueError):
     pass
 
 
+def _calculate_x_axis_ticks(
+    use_fixed_axis: bool,
+    counts: pd.DataFrame,
+    padded_counts: pd.DataFrame,
+    center: float,
+    xtick_interval: typing.Optional[int],
+    fixed_max_label_percentage_left: typing.Optional[float],
+    fixed_max_label_percentage_right: typing.Optional[float],
+    counts_are_percentages: bool,
+    num_ticks_available: typing.Optional[int] = None,
+    current_xlim: typing.Optional[typing.Tuple[float, float]] = None,
+) -> typing.Tuple[np.ndarray, typing.List[str], typing.Tuple[float, float]]:
+    """
+    Helper function to calculate x-axis ticks, labels, and limits.
+    Returns (xvalues, xlabels_formatted, (xlim_min, xlim_max))
+    """
+    if use_fixed_axis:
+        # Fixed axis logic for consistent scaling
+        assert fixed_max_label_percentage_left is not None
+        assert fixed_max_label_percentage_right is not None
+
+        # Determine the tick interval to use
+        current_xtick_interval = xtick_interval if xtick_interval is not None else 10
+
+        # Generate left labels (positive numbers representing distance from center)
+        left_labels_fixed = np.arange(0, fixed_max_label_percentage_left + 1, current_xtick_interval)
+
+        # Generate right labels (positive numbers representing distance from center)
+        right_labels_fixed = np.arange(current_xtick_interval, fixed_max_label_percentage_right + 1, current_xtick_interval)
+
+        # Combine to form the new xlabels (unique, sorted positive magnitudes)
+        xlabels = np.unique(np.concatenate([left_labels_fixed, right_labels_fixed]))
+        xlabels = np.sort(xlabels)
+
+        # Calculate xvalues based on these xlabels
+        left_values = center - left_labels_fixed[left_labels_fixed > 0][::-1]  # Reverse for correct order
+        right_values = center + right_labels_fixed[right_labels_fixed > 0]
+        xvalues = np.concatenate([left_values, [center], right_values])
+
+        # Ensure xlabels correspond one-to-one with xvalues
+        xlabels_for_display = np.concatenate([left_labels_fixed[left_labels_fixed > 0][::-1], [0], right_labels_fixed[right_labels_fixed > 0]])
+
+        # Convert to integers and add % signs
+        xlabels_formatted = [str(int(label)) + "%" for label in xlabels_for_display]
+
+        # Set x-axis limits for fixed axis
+        x_axis_min_val = center - fixed_max_label_percentage_left
+        x_axis_max_val = center + fixed_max_label_percentage_right
+
+        # Calculate padding based on fixed range
+        effective_total_width_for_padding = fixed_max_label_percentage_left + fixed_max_label_percentage_right
+        padding_left_calculated = effective_total_width_for_padding * PADDING_LEFT
+        padding_right_calculated = effective_total_width_for_padding * PADDING_RIGHT
+
+        # Set limits with padding
+        xlim = (x_axis_min_val - padding_left_calculated, x_axis_max_val + padding_right_calculated)
+
+    else:
+        # Original dynamic axis logic
+        max_width = int(round(padded_counts.sum(axis=1).max()))
+        if xtick_interval is None:
+            if num_ticks_available is None:
+                 # Fallback if not provided, though typically it should be
+                 num_ticks_available = 10
+            interval = interval_helper.get_interval_for_scale(num_ticks_available, max_width)
+        else:
+            interval = xtick_interval
+
+        right_edge = max_width - center
+        right_labels = np.arange(interval, right_edge + interval, interval)
+        right_values = center + right_labels
+        left_labels = np.arange(0, center + 1, interval)
+        left_values = center - left_labels
+        xlabels = np.concatenate([left_labels, right_labels])
+        xvalues = np.concatenate([left_values, right_values])
+
+        xlabels = [int(label) for label in xlabels if round(label) == label]
+
+        # Ensure tick labels don't exceed number of participants
+        # (or, in the case of percentages, 100%) since that looks confusing
+        if HIDE_EXCESSIVE_TICK_LABELS:
+            # Labels for tick values that are too high are hidden,
+            # but the tick mark itself remains displayed.
+            total_max = counts.sum(axis="columns").max()
+            xlabels = ["" if label > total_max else label for label in xlabels]
+
+        if counts_are_percentages:
+            xlabels_formatted = [str(label) + "%" if label != "" else "" for label in xlabels]
+        else:
+            xlabels_formatted = [str(label) if label != "" else "" for label in xlabels]
+
+        # Adjust padding for dynamic axis
+        counts_sum = counts.sum(axis="columns").max()
+        # Pad the bars on the left (so there's a gap between the axis and the first section)
+        padding_left = counts_sum * PADDING_LEFT
+        # Tighten the padding on the right of the figure
+        padding_right = counts_sum * PADDING_RIGHT
+
+        if current_xlim:
+            x_min, x_max = current_xlim
+            xlim = (x_min - padding_left, x_max - padding_right)
+        else:
+             # This case might happen in testing if we don't pass current_xlim
+             # We can't perfectly reproduce the original logic without the axes object state
+             # But usually we will pass it.
+             # Safe fallback?
+             xlim = (0 - padding_left, max_width - padding_right) # Rough approximation
+
+    return xvalues, xlabels_formatted, xlim
+
+
 def plot_counts(
     counts: pd.DataFrame,
     scale: Scale,
@@ -173,88 +284,20 @@ def plot_counts(
     center_line.set_zorder(-1)
 
     # Compute and show x labels
-    if use_fixed_axis:
-        # Fixed axis logic for consistent scaling
-        # At this point, we know both fixed parameters are not None due to use_fixed_axis condition
-        assert fixed_max_label_percentage_left is not None
-        assert fixed_max_label_percentage_right is not None
+    xvalues, xlabels_formatted, xlim = _calculate_x_axis_ticks(
+        use_fixed_axis,
+        counts,
+        padded_counts,
+        center,
+        xtick_interval,
+        fixed_max_label_percentage_left,
+        fixed_max_label_percentage_right,
+        counts_are_percentages,
+        axes.xaxis.get_tick_space(),
+        axes.get_xlim(),
+    )
 
-        # Determine the tick interval to use
-        current_xtick_interval = xtick_interval if xtick_interval is not None else 10
-
-        # Generate left labels (positive numbers representing distance from center)
-        left_labels_fixed = np.arange(0, fixed_max_label_percentage_left + 1, current_xtick_interval)
-
-        # Generate right labels (positive numbers representing distance from center)
-        right_labels_fixed = np.arange(current_xtick_interval, fixed_max_label_percentage_right + 1, current_xtick_interval)
-
-        # Combine to form the new xlabels (unique, sorted positive magnitudes)
-        xlabels = np.unique(np.concatenate([left_labels_fixed, right_labels_fixed]))
-        xlabels = np.sort(xlabels)
-
-        # Calculate xvalues based on these xlabels
-        left_values = center - left_labels_fixed[left_labels_fixed > 0][::-1]  # Reverse for correct order
-        right_values = center + right_labels_fixed[right_labels_fixed > 0]
-        xvalues = np.concatenate([left_values, [center], right_values])
-
-        # Ensure xlabels correspond one-to-one with xvalues
-        xlabels_for_display = np.concatenate([left_labels_fixed[left_labels_fixed > 0][::-1], [0], right_labels_fixed[right_labels_fixed > 0]])
-
-        # Convert to integers and add % signs
-        xlabels_formatted = [str(int(label)) + "%" for label in xlabels_for_display]
-
-        # Set x-axis limits for fixed axis
-        x_axis_min_val = center - fixed_max_label_percentage_left
-        x_axis_max_val = center + fixed_max_label_percentage_right
-
-        # Calculate padding based on fixed range
-        effective_total_width_for_padding = fixed_max_label_percentage_left + fixed_max_label_percentage_right
-        padding_left_calculated = effective_total_width_for_padding * PADDING_LEFT
-        padding_right_calculated = effective_total_width_for_padding * PADDING_RIGHT
-
-        # Set limits with padding
-        axes.set_xlim(x_axis_min_val - padding_left_calculated, x_axis_max_val + padding_right_calculated)
-
-    else:
-        # Original dynamic axis logic
-        max_width = int(round(padded_counts.sum(axis=1).max()))
-        if xtick_interval is None:
-            num_ticks = axes.xaxis.get_tick_space()
-            interval = interval_helper.get_interval_for_scale(num_ticks, max_width)
-        else:
-            interval = xtick_interval
-
-        right_edge = max_width - center
-        right_labels = np.arange(interval, right_edge + interval, interval)
-        right_values = center + right_labels
-        left_labels = np.arange(0, center + 1, interval)
-        left_values = center - left_labels
-        xlabels = np.concatenate([left_labels, right_labels])
-        xvalues = np.concatenate([left_values, right_values])
-
-        xlabels = [int(label) for label in xlabels if round(label) == label]
-
-        # Ensure tick labels don't exceed number of participants
-        # (or, in the case of percentages, 100%) since that looks confusing
-        if HIDE_EXCESSIVE_TICK_LABELS:
-            # Labels for tick values that are too high are hidden,
-            # but the tick mark itself remains displayed.
-            total_max = counts.sum(axis="columns").max()
-            xlabels = ["" if label > total_max else label for label in xlabels]
-
-        if counts_are_percentages:
-            xlabels_formatted = [str(label) + "%" if label != "" else "" for label in xlabels]
-        else:
-            xlabels_formatted = [str(label) if label != "" else "" for label in xlabels]
-
-        # Adjust padding for dynamic axis
-        counts_sum = counts.sum(axis="columns").max()
-        # Pad the bars on the left (so there's a gap between the axis and the first section)
-        padding_left = counts_sum * PADDING_LEFT
-        # Tighten the padding on the right of the figure
-        padding_right = counts_sum * PADDING_RIGHT
-        x_min, x_max = axes.get_xlim()
-        axes.set_xlim(x_min - padding_left, x_max - padding_right)
+    axes.set_xlim(xlim)
 
     # Set ticks and labels (common for both fixed and dynamic)
     axes.set_xticks(xvalues)
@@ -271,6 +314,7 @@ def plot_counts(
     # Add labels
     if bar_labels:
         bar_label_format = BAR_LABEL_FORMAT + ("%%" if compute_percentages else "")
+        counts_sum = counts.sum(axis="columns").max()
         bar_size_cutoff = counts_sum * BAR_LABEL_SIZE_CUTOFF
 
         if isinstance(bar_labels_color, list):
