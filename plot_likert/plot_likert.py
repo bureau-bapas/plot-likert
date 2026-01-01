@@ -10,7 +10,6 @@ the data must be strings
 for a float: scores.applymap(int).applymap(str)
 """
 
-
 import logging
 import typing
 from warnings import warn
@@ -22,7 +21,6 @@ import pandas as pd
 
 try:
     import matplotlib.axes
-    import matplotlib.pyplot as plt
 except RuntimeError as err:
     logging.error(
         "Couldn't import matplotlib, likely because this package is running in an environment that doesn't support it (i.e., without a graphical output). See error for more information."
@@ -71,22 +69,36 @@ def _calculate_x_axis_ticks(
         current_xtick_interval = xtick_interval if xtick_interval is not None else 10
 
         # Generate left labels (positive numbers representing distance from center)
-        left_labels_fixed = np.arange(0, fixed_max_label_percentage_left + 1, current_xtick_interval)
+        left_labels_fixed = np.arange(
+            0, fixed_max_label_percentage_left + 1, current_xtick_interval
+        )
 
         # Generate right labels (positive numbers representing distance from center)
-        right_labels_fixed = np.arange(current_xtick_interval, fixed_max_label_percentage_right + 1, current_xtick_interval)
+        right_labels_fixed = np.arange(
+            current_xtick_interval,
+            fixed_max_label_percentage_right + 1,
+            current_xtick_interval,
+        )
 
         # Combine to form the new xlabels (unique, sorted positive magnitudes)
         xlabels = np.unique(np.concatenate([left_labels_fixed, right_labels_fixed]))
         xlabels = np.sort(xlabels)
 
         # Calculate xvalues based on these xlabels
-        left_values = center - left_labels_fixed[left_labels_fixed > 0][::-1]  # Reverse for correct order
+        left_values = (
+            center - left_labels_fixed[left_labels_fixed > 0][::-1]
+        )  # Reverse for correct order
         right_values = center + right_labels_fixed[right_labels_fixed > 0]
         xvalues = np.concatenate([left_values, [center], right_values])
 
         # Ensure xlabels correspond one-to-one with xvalues
-        xlabels_for_display = np.concatenate([left_labels_fixed[left_labels_fixed > 0][::-1], [0], right_labels_fixed[right_labels_fixed > 0]])
+        xlabels_for_display = np.concatenate(
+            [
+                left_labels_fixed[left_labels_fixed > 0][::-1],
+                [0],
+                right_labels_fixed[right_labels_fixed > 0],
+            ]
+        )
 
         # Convert to integers and add % signs
         xlabels_formatted = [str(int(label)) + "%" for label in xlabels_for_display]
@@ -96,21 +108,28 @@ def _calculate_x_axis_ticks(
         x_axis_max_val = center + fixed_max_label_percentage_right
 
         # Calculate padding based on fixed range
-        effective_total_width_for_padding = fixed_max_label_percentage_left + fixed_max_label_percentage_right
+        effective_total_width_for_padding = (
+            fixed_max_label_percentage_left + fixed_max_label_percentage_right
+        )
         padding_left_calculated = effective_total_width_for_padding * PADDING_LEFT
         padding_right_calculated = effective_total_width_for_padding * PADDING_RIGHT
 
         # Set limits with padding
-        xlim = (x_axis_min_val - padding_left_calculated, x_axis_max_val + padding_right_calculated)
+        xlim = (
+            x_axis_min_val - padding_left_calculated,
+            x_axis_max_val + padding_right_calculated,
+        )
 
     else:
         # Original dynamic axis logic
         max_width = int(round(padded_counts.sum(axis=1).max()))
         if xtick_interval is None:
             if num_ticks_available is None:
-                 # Fallback if not provided, though typically it should be
-                 num_ticks_available = 10
-            interval = interval_helper.get_interval_for_scale(num_ticks_available, max_width)
+                # Fallback if not provided, though typically it should be
+                num_ticks_available = 10
+            interval = interval_helper.get_interval_for_scale(
+                num_ticks_available, max_width
+            )
         else:
             interval = xtick_interval
 
@@ -133,7 +152,9 @@ def _calculate_x_axis_ticks(
             xlabels = ["" if label > total_max else label for label in xlabels]
 
         if counts_are_percentages:
-            xlabels_formatted = [str(label) + "%" if label != "" else "" for label in xlabels]
+            xlabels_formatted = [
+                str(label) + "%" if label != "" else "" for label in xlabels
+            ]
         else:
             xlabels_formatted = [str(label) if label != "" else "" for label in xlabels]
 
@@ -148,11 +169,11 @@ def _calculate_x_axis_ticks(
             x_min, x_max = current_xlim
             xlim = (x_min - padding_left, x_max - padding_right)
         else:
-             # This case might happen in testing if we don't pass current_xlim
-             # We can't perfectly reproduce the original logic without the axes object state
-             # But usually we will pass it.
-             # Safe fallback?
-             xlim = (0 - padding_left, max_width - padding_right) # Rough approximation
+            # This case might happen in testing if we don't pass current_xlim
+            # We can't perfectly reproduce the original logic without the axes object state
+            # But usually we will pass it.
+            # Safe fallback?
+            xlim = (0 - padding_left, max_width - padding_right)  # Rough approximation
 
     return xvalues, xlabels_formatted, xlim
 
@@ -233,17 +254,37 @@ def plot_counts(
             counts_are_percentages = False
 
     # Validate fixed axis parameters
-    if fixed_max_label_percentage_left is not None or fixed_max_label_percentage_right is not None:
+    if (
+        fixed_max_label_percentage_left is not None
+        or fixed_max_label_percentage_right is not None
+    ):
         if not counts_are_percentages:
             warn(
                 "fixed_max_label_percentage_left and fixed_max_label_percentage_right parameters are ignored when not plotting percentages (compute_percentages=False)",
                 UserWarning,
             )
         else:
-            if fixed_max_label_percentage_left is not None and fixed_max_label_percentage_left < 0:
+            if (
+                fixed_max_label_percentage_left is not None
+                and fixed_max_label_percentage_left < 0
+            ):
                 raise ValueError("fixed_max_label_percentage_left must be non-negative")
-            if fixed_max_label_percentage_right is not None and fixed_max_label_percentage_right < 0:
-                raise ValueError("fixed_max_label_percentage_right must be non-negative")
+            if (
+                fixed_max_label_percentage_right is not None
+                and fixed_max_label_percentage_right < 0
+            ):
+                raise ValueError(
+                    "fixed_max_label_percentage_right must be non-negative"
+                )
+
+            # Check if only one parameter is provided
+            if (fixed_max_label_percentage_left is not None) != (
+                fixed_max_label_percentage_right is not None
+            ):
+                warn(
+                    "Both `fixed_max_label_percentage_left` and `fixed_max_label_percentage_right` are required to use the fixed axis feature. Only one was provided, so the feature will be ignored.",
+                    UserWarning,
+                )
 
     # Determine if fixed axis logic should be applied
     use_fixed_axis = (

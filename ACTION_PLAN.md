@@ -6,15 +6,12 @@
   - Add `fixed_max_label_percentage_left` and `fixed_max_label_percentage_right` to `plot_likert()` signature
   - Pass them through to `plot_counts()`
 
-- [ ] **Remove backup file**
-  - Delete `plot_likert.py.bak`
-
 ## Recommended
 
-- [ ] **Add warning when only one fixed param is provided**
+- [x] **Add warning when only one fixed param is provided**
   - If user provides `fixed_max_label_percentage_left` but not `_right` (or vice versa), warn that the feature requires both
 
-- [ ] **Clean up test comments**
+- [x] **Clean up test comments**
   - Remove verbose explanatory comments in `tests/test_plot_likert.py`
 
 ## Optional
