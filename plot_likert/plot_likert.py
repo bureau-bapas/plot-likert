@@ -22,7 +22,6 @@ import pandas as pd
 
 try:
     import matplotlib.axes
-    import matplotlib.pyplot as plt
 except RuntimeError as err:
     logging.error(
         "Couldn't import matplotlib, likely because this package is running in an environment that doesn't support it (i.e., without a graphical output). See error for more information."
