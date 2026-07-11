@@ -334,7 +334,7 @@ def likert_response(df: pd.DataFrame, scale: Scale) -> pd.DataFrame:
         try:
             df = df.map(lambda x: scale[i] if str(i) in x else x)
         except AttributeError:  # for compatibility with Pandas < 2.1.0
-            df = df.map(lambda x: scale[i] if str(i) in x else x)
+            df = df.applymap(lambda x: scale[i] if str(i) in x else x)
     return df
 
 
